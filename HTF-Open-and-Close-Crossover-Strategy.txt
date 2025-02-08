@@ -1,0 +1,116 @@
+//@version=6
+// HTF Open and Close Crossover – Strategy
+// -----------------------------------------
+// Description:
+//     - Uses alternate (higher) timeframe series for confirmation.
+//     - Applies a custom smoothed moving average (SMMA) function.
+//     - Incorporates momentum, RSI, Bollinger Bands, and price channel breakout methods.
+//     - Generates long/short entries based on combined conditions.
+
+// Pros:
+//     - Modular functions improve readability.
+//     - Alternate timeframe data can help filter noise.
+//     - Multiple indicators for robust signal generation.
+
+// Cons:
+//     - Strategy complexity may be overfitted to specific market conditions.
+//     - Alternate timeframe calls can be computationally intensive.
+    
+// Author: Tugume William Mutara (watchdawg2025)
+// Copyright © 2025. All rights reserved.
+
+
+strategy("HTF Crossover Trading - Strategy", overlay=true)
+
+// ===== Alternate Resolution Settings =====
+// Use an alternate resolution series if needed. The input resolution multiplier adjusts based on the current chart timeframe.
+useAlternateResolution = true
+alternateResolutionMultiplier = 10
+alternateResolutionString = timeframe.ismonthly  ? str.tostring(timeframe.multiplier * alternateResolutionMultiplier, "###m") : timeframe.isweekly   ? str.tostring(timeframe.multiplier * alternateResolutionMultiplier, "###w") : timeframe.isdaily    ? str.tostring(timeframe.multiplier * alternateResolutionMultiplier, "###d") : timeframe.isintraday ? str.tostring(timeframe.multiplier * alternateResolutionMultiplier, "####") : "60"
+
+// ===== SMMA Function =====
+// A custom smoothed moving average (SMMA) function
+calculateSMMA(src, length) =>
+    var float smmaValue = na
+    simpleMA = ta.sma(src, length)
+    smmaValue := na(smmaValue) ? simpleMA : (smmaValue * (length - 1) + src) / length
+    smmaValue
+
+// ===== Security Wrapper for Alternate Resolution Series =====
+// This function retrieves data from a specified resolution if alternate resolution is enabled.
+getAlternateResolutionSeries(seriesToRequest, useAlternate, resolutionStr) =>
+    alternateSeries = request.security(syminfo.tickerid, resolutionStr, seriesToRequest, gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+    useAlternate ? alternateSeries : seriesToRequest
+
+// ===== Generate SMMA Series for Price Data =====
+maLength = 2
+smoothedClose = calculateSMMA(close, maLength)
+smoothedOpen  = calculateSMMA(open,  maLength)
+
+// Retrieve alternate resolution series if enabled
+altSmoothedClose = getAlternateResolutionSeries(smoothedClose, useAlternateResolution, alternateResolutionString)
+altSmoothedOpen  = getAlternateResolutionSeries(smoothedOpen,  useAlternateResolution, alternateResolutionString)
+
+// ===== High/Low Series Setup =====
+smoothedHigh = calculateSMMA(high, maLength)
+smoothedLow  = calculateSMMA(low,  maLength)
+
+// Retrieve alternate resolution series for high and low values
+altSmoothedHigh = getAlternateResolutionSeries(smoothedHigh, useAlternateResolution, alternateResolutionString)
+altSmoothedLow  = getAlternateResolutionSeries(smoothedLow,  useAlternateResolution, alternateResolutionString)
+
+// ===== Alternate Resolution Series Crossovers =====
+// Identify crossovers between the alternate close and open series as primary signals.
+isLongCrossover  = ta.crossover(altSmoothedClose, altSmoothedOpen)
+isShortCrossunder = ta.crossunder(altSmoothedClose, altSmoothedOpen)
+longSignalCondition  = isLongCrossover
+shortSignalCondition = isShortCrossunder
+
+// ===== Momentum Calculation =====
+// Simple momentum calculation: difference between current series and the series 'length' bars ago.
+momentum(series, length) =>
+    series - series[length]
+momentumValue0 = momentum(altSmoothedClose, 2)
+momentumValue1 = momentum(momentumValue0, 1)
+
+// ===== RSI Settings =====
+rsiLength    = 2
+rsiOversold  = 30
+rsiOverbought= 70
+rsiValue     = ta.rsi(altSmoothedClose, rsiLength)
+rsiCrossover = ta.crossover(rsiValue, rsiOversold)
+rsiCrossunder= ta.crossunder(rsiValue, rsiOverbought)
+
+// ===== Bollinger Bands =====
+bollingerLength = 2
+bollingerMultiplier = 2.0
+basisLine   = calculateSMMA(altSmoothedClose, bollingerLength)
+bandDeviation = bollingerMultiplier * ta.stdev(altSmoothedClose, bollingerLength)
+upperBand   = basisLine + bandDeviation
+lowerBand   = basisLine - bandDeviation
+bollingerLongSignal  = ta.crossover(altSmoothedClose, lowerBand)
+bollingerShortSignal = ta.crossunder(altSmoothedClose, upperBand)
+
+// ===== Price Channel Strategy =====
+priceChannelLength = 2
+highestHigh = ta.highest(smoothedHigh, priceChannelLength)
+lowestLow   = ta.lowest(smoothedLow, priceChannelLength)
+priceChannelLongSignal  = altSmoothedClose > highestHigh
+priceChannelShortSignal = altSmoothedClose < lowestLow
+
+// ===== Channel Breakout Strategy =====
+channelBreakoutLength = 2
+upperBound = ta.highest(smoothedHigh, channelBreakoutLength)
+lowerBound = ta.lowest(smoothedLow, channelBreakoutLength)
+channelBreakoutLongSignal  = altSmoothedClose > (upperBound + syminfo.mintick)
+channelBreakoutShortSignal = altSmoothedClose < (lowerBound - syminfo.mintick)
+
+// ===== Execution Logic =====
+// Combine all signals for entry decisions. All conditions must be met for a long or short entry.
+longEntrySignal = longSignalCondition and (momentumValue0 > 0) and (momentumValue1 > 0) and rsiCrossover and bollingerLongSignal and priceChannelLongSignal and channelBreakoutLongSignal
+shortEntrySignal = shortSignalCondition and (momentumValue0 < 0) and (momentumValue1 < 0) and rsiCrossunder and bollingerShortSignal and priceChannelShortSignal and channelBreakoutShortSignal
+
+if longEntrySignal
+    strategy.entry("Long", strategy.long)
+if shortEntrySignal
+    strategy.entry("Short", strategy.short)
