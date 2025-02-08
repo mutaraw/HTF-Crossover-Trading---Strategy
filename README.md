@@ -1,4 +1,4 @@
-# HTF-Crossover-Trading-Strategy
+# HTF-Open-&-Close-Crossover-Trading-Strategy
 -----------------------------------------
 # Description:
 - Uses alternate (higher) timeframe series for confirmation.
