@@ -45,7 +45,8 @@ maLength: The length of the SMMA. A larger value will result in a smoother movin
 rsiLength, rsiOversold, rsiOverbought: Adjust the RSI parameters.
 bollingerLength, bollingerMultiplier: Adjust the Bollinger Band parameters.
 priceChannelLength, channelBreakoutLength: Adjust the lookback periods for the price channel and channel breakout calculations.
-Add to Chart: Click the "Add to Chart" button to apply the strategy to your chart.
+
+- Add to Chart: Click the "Add to Chart" button to apply the strategy to your chart.
 
 - Backtesting:  Use TradingView's backtesting feature to evaluate the historical performance of the strategy.  This is critical.  Experiment with different parameter combinations and analyze the results.  Pay close attention to metrics like net profit, drawdown, Sharpe ratio, and win rate.  However, remember that backtested performance is not a guarantee of future results.  Be aware of the potential for overfitting.
 
